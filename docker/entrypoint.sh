@@ -5,7 +5,7 @@ umask 077
 mkdir -p /run/grok2api /app/data
 
 CONFIG_DEST=/app/config.yaml
-PORT_NUM="${PORT:-8000}"
+PORT_NUM="${PORT:-8080}"
 LISTEN_ADDR="0.0.0.0:${PORT_NUM}"
 
 write_config_from_file() {
@@ -17,17 +17,23 @@ write_config_from_file() {
   chmod 0600 "$CONFIG_DEST"
 }
 
+is_set_nonempty() {
+  # Safe under set -u: returns 0 only if var is set and non-empty
+  eval "test -n \"\${$1+x}\"" || return 1
+  eval "test -n \"\${$1}\"" || return 1
+  return 0
+}
+
 # --- resolve config ---
-if [ -n "${GROK2API_CONFIG:-}" ]; then
+if is_set_nonempty GROK2API_CONFIG; then
   # Full YAML injected via env/secret (recommended on PandaStack)
-  printf '%s\n' "$GROK2API_CONFIG" > /run/grok2api/config.yaml
+  # shellcheck disable=SC2154
+  eval "printf '%s\n' \"\${GROK2API_CONFIG}\" > /run/grok2api/config.yaml"
   write_config_from_file /run/grok2api/config.yaml
 elif [ -f /app/config.pandastack.yaml ]; then
-  # Template mode: require secrets from environment
   missing=""
   for v in JWT_SECRET CREDENTIAL_KEY ADMIN_USER ADMIN_PASSWORD DATABASE_DSN; do
-    eval "val=\$$v"
-    if [ -z "${val:-}" ]; then
+    if ! is_set_nonempty "$v"; then
       missing="$missing $v"
     fi
   done
@@ -52,7 +58,6 @@ fi
 
 echo "starting grok2api listen=${LISTEN_ADDR}" >&2
 
-# Prefer official non-root user when present
 if command -v su-exec >/dev/null 2>&1 && id grok2api >/dev/null 2>&1; then
   exec su-exec grok2api:grok2api /app/grok2api --config "$CONFIG_DEST" --listen "$LISTEN_ADDR"
 fi
