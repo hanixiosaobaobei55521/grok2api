@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: grok2api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: TZ
+        value: Asia/Shanghai
+      - key: GROK2API_CONFIG
+        sync: false
