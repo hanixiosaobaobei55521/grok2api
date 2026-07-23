@@ -17,31 +17,26 @@ write_config_from_file() {
   chmod 0600 "$CONFIG_DEST"
 }
 
-is_set_nonempty() {
-  # Safe under set -u: returns 0 only if var is set and non-empty
-  eval "test -n \"\${$1+x}\"" || return 1
-  eval "test -n \"\${$1}\"" || return 1
-  return 0
-}
+# Temporarily allow unset vars while probing secrets (set -u is restored after)
+set +u
 
-# --- resolve config ---
-if is_set_nonempty GROK2API_CONFIG; then
-  # Full YAML injected via env/secret (recommended on PandaStack)
-  # shellcheck disable=SC2154
-  eval "printf '%s\n' \"\${GROK2API_CONFIG}\" > /run/grok2api/config.yaml"
+if [ -n "${GROK2API_CONFIG}" ]; then
+  printf '%s\n' "${GROK2API_CONFIG}" > /run/grok2api/config.yaml
+  set -u
   write_config_from_file /run/grok2api/config.yaml
 elif [ -f /app/config.pandastack.yaml ]; then
   missing=""
-  for v in JWT_SECRET CREDENTIAL_KEY ADMIN_USER ADMIN_PASSWORD DATABASE_DSN; do
-    if ! is_set_nonempty "$v"; then
-      missing="$missing $v"
-    fi
-  done
+  [ -n "${JWT_SECRET}" ] || missing="$missing JWT_SECRET"
+  [ -n "${CREDENTIAL_KEY}" ] || missing="$missing CREDENTIAL_KEY"
+  [ -n "${ADMIN_USER}" ] || missing="$missing ADMIN_USER"
+  [ -n "${ADMIN_PASSWORD}" ] || missing="$missing ADMIN_PASSWORD"
+  [ -n "${DATABASE_DSN}" ] || missing="$missing DATABASE_DSN"
   if [ -n "$missing" ]; then
     echo "missing required env vars for config template:$missing" >&2
     echo "set GROK2API_CONFIG (full yaml) OR set JWT_SECRET CREDENTIAL_KEY ADMIN_USER ADMIN_PASSWORD DATABASE_DSN" >&2
     exit 1
   fi
+  set -u
   # shellcheck disable=SC2016
   envsubst '${JWT_SECRET} ${CREDENTIAL_KEY} ${ADMIN_USER} ${ADMIN_PASSWORD} ${DATABASE_DSN}' \
     < /app/config.pandastack.yaml > "$CONFIG_DEST"
@@ -50,12 +45,14 @@ elif [ -f /app/config.pandastack.yaml ]; then
   fi
   chmod 0600 "$CONFIG_DEST"
 elif [ -f "${GROK2API_CONFIG_SOURCE:-/run/grok2api/config.yaml}" ]; then
+  set -u
   write_config_from_file "${GROK2API_CONFIG_SOURCE}"
 else
   echo "missing config: set GROK2API_CONFIG env, or template envs, or mount config.yaml to /run/grok2api/config.yaml" >&2
   exit 1
 fi
 
+set -u
 echo "starting grok2api listen=${LISTEN_ADDR}" >&2
 
 if command -v su-exec >/dev/null 2>&1 && id grok2api >/dev/null 2>&1; then
