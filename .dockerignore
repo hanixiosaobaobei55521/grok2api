@@ -1,6 +1,1 @@
-**
-!deploy/
-!deploy/**
-!docker/
-!docker/entrypoint.sh
-!VERSION
+*
