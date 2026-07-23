@@ -49,7 +49,7 @@ FROM alpine:${ALPINE_VERSION}
 ENV TZ=Asia/Shanghai \
     GROK2API_CONFIG_SOURCE=/run/grok2api/config.yaml
 
-RUN apk add --no-cache ca-certificates su-exec tzdata && \
+RUN apk add --no-cache ca-certificates su-exec tzdata gettext && \
     addgroup -S -g 10001 grok2api && \
     adduser -S -D -H -u 10001 -G grok2api grok2api && \
     mkdir -p /app/data /run/grok2api && \
@@ -61,6 +61,7 @@ COPY --from=backend-builder --chmod=0755 /out/grok2api /app/grok2api
 COPY --from=frontend-builder /src/frontend/dist /app/frontend/dist
 COPY VERSION /app/VERSION
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/grok2api-entrypoint
+COPY docker/config.pandastack.yaml /app/config.pandastack.yaml
 
 EXPOSE 8000
 
