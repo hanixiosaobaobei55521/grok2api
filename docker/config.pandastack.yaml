@@ -1,0 +1,42 @@
+server:
+  listen: "0.0.0.0:8000"
+  maxBodyBytes: 33554432
+  readTimeout: 15m
+  requestTimeout: 2h
+  swaggerEnabled: false
+
+auth:
+  accessTokenTTL: 15m
+  refreshTokenTTL: 720h
+  secureCookies: true
+
+secrets:
+  jwtSecret: "${JWT_SECRET}"
+  credentialEncryptionKey: "${CREDENTIAL_KEY}"
+
+bootstrapAdmin:
+  username: "${ADMIN_USER}"
+  password: "${ADMIN_PASSWORD}"
+
+frontend:
+  staticPath: "./frontend/dist"
+
+database:
+  driver: postgres
+  postgres:
+    dsn: "${DATABASE_DSN}"
+    maxOpenConns: 50
+    maxIdleConns: 10
+
+runtimeStore:
+  driver: memory
+
+media:
+  driver: local
+  local:
+    path: "./data/media"
+
+routing:
+  reasoningReplayEnabled: true
+  reasoningReplayTTL: 1h
+  reasoningReplayMaxEntries: 10240
