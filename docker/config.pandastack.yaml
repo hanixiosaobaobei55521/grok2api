@@ -25,8 +25,8 @@ database:
   driver: postgres
   postgres:
     dsn: "${DATABASE_DSN}"
-    maxOpenConns: 50
-    maxIdleConns: 10
+    maxOpenConns: 20
+    maxIdleConns: 5
 
 runtimeStore:
   driver: memory
