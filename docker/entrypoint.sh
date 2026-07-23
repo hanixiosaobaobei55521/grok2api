@@ -2,32 +2,59 @@
 set -eu
 
 umask 077
-mkdir -p /run/grok2api
+mkdir -p /run/grok2api /app/data
 
 CONFIG_DEST=/app/config.yaml
+PORT_NUM="${PORT:-8000}"
+LISTEN_ADDR="0.0.0.0:${PORT_NUM}"
 
-# PandaStack mode: config template with ${VAR} placeholders
-if [ -f /app/config.pandastack.yaml ] && [ -z "${GROK2API_CONFIG:-}" ]; then
-  # Use envsubst to replace ${VAR} placeholders with environment variable values
-  envsubst < /app/config.pandastack.yaml > "$CONFIG_DEST"
-  chown grok2api:grok2api "$CONFIG_DEST"
+write_config_from_file() {
+  src="$1"
+  cp "$src" "$CONFIG_DEST"
+  if id grok2api >/dev/null 2>&1; then
+    chown grok2api:grok2api "$CONFIG_DEST" 2>/dev/null || true
+  fi
   chmod 0600 "$CONFIG_DEST"
-elif [ -n "${GROK2API_CONFIG:-}" ]; then
-  # GROK2API_CONFIG env var contains full YAML content
-  printf '%s' "$GROK2API_CONFIG" > /run/grok2api/config.yaml
-  GROK2API_CONFIG_SOURCE=/run/grok2api/config.yaml
-  cp "${GROK2API_CONFIG_SOURCE}" "$CONFIG_DEST"
-  chown grok2api:grok2api "$CONFIG_DEST"
-  chmod 0600 "$CONFIG_DEST"
-else
-  # Original mode: mount config.yaml to /run/grok2api/config.yaml
-  if [ ! -f "${GROK2API_CONFIG_SOURCE}" ]; then
-    echo "missing config: set GROK2API_CONFIG env or mount config.yaml to /run/grok2api/config.yaml" >&2
+}
+
+# --- resolve config ---
+if [ -n "${GROK2API_CONFIG:-}" ]; then
+  # Full YAML injected via env/secret (recommended on PandaStack)
+  printf '%s\n' "$GROK2API_CONFIG" > /run/grok2api/config.yaml
+  write_config_from_file /run/grok2api/config.yaml
+elif [ -f /app/config.pandastack.yaml ]; then
+  # Template mode: require secrets from environment
+  missing=""
+  for v in JWT_SECRET CREDENTIAL_KEY ADMIN_USER ADMIN_PASSWORD DATABASE_DSN; do
+    eval "val=\$$v"
+    if [ -z "${val:-}" ]; then
+      missing="$missing $v"
+    fi
+  done
+  if [ -n "$missing" ]; then
+    echo "missing required env vars for config template:$missing" >&2
+    echo "set GROK2API_CONFIG (full yaml) OR set JWT_SECRET CREDENTIAL_KEY ADMIN_USER ADMIN_PASSWORD DATABASE_DSN" >&2
     exit 1
   fi
-  cp "${GROK2API_CONFIG_SOURCE}" "$CONFIG_DEST"
-  chown grok2api:grok2api "$CONFIG_DEST"
+  # shellcheck disable=SC2016
+  envsubst '${JWT_SECRET} ${CREDENTIAL_KEY} ${ADMIN_USER} ${ADMIN_PASSWORD} ${DATABASE_DSN}' \
+    < /app/config.pandastack.yaml > "$CONFIG_DEST"
+  if id grok2api >/dev/null 2>&1; then
+    chown grok2api:grok2api "$CONFIG_DEST" 2>/dev/null || true
+  fi
   chmod 0600 "$CONFIG_DEST"
+elif [ -f "${GROK2API_CONFIG_SOURCE:-/run/grok2api/config.yaml}" ]; then
+  write_config_from_file "${GROK2API_CONFIG_SOURCE}"
+else
+  echo "missing config: set GROK2API_CONFIG env, or template envs, or mount config.yaml to /run/grok2api/config.yaml" >&2
+  exit 1
 fi
 
-exec su-exec grok2api:grok2api "$@"
+echo "starting grok2api listen=${LISTEN_ADDR}" >&2
+
+# Prefer official non-root user when present
+if command -v su-exec >/dev/null 2>&1 && id grok2api >/dev/null 2>&1; then
+  exec su-exec grok2api:grok2api /app/grok2api --config "$CONFIG_DEST" --listen "$LISTEN_ADDR"
+fi
+
+exec /app/grok2api --config "$CONFIG_DEST" --listen "$LISTEN_ADDR"
