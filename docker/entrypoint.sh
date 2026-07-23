@@ -17,38 +17,17 @@ write_config_from_file() {
   chmod 0600 "$CONFIG_DEST"
 }
 
-# Temporarily allow unset vars while probing secrets (set -u is restored after)
+# Allow probing optional env under set -u
 set +u
-
 if [ -n "${GROK2API_CONFIG}" ]; then
   printf '%s\n' "${GROK2API_CONFIG}" > /run/grok2api/config.yaml
   set -u
   write_config_from_file /run/grok2api/config.yaml
-elif [ -f /app/config.pandastack.yaml ]; then
-  missing=""
-  [ -n "${JWT_SECRET}" ] || missing="$missing JWT_SECRET"
-  [ -n "${CREDENTIAL_KEY}" ] || missing="$missing CREDENTIAL_KEY"
-  [ -n "${ADMIN_USER}" ] || missing="$missing ADMIN_USER"
-  [ -n "${ADMIN_PASSWORD}" ] || missing="$missing ADMIN_PASSWORD"
-  [ -n "${DATABASE_DSN}" ] || missing="$missing DATABASE_DSN"
-  if [ -n "$missing" ]; then
-    echo "missing required env vars for config template:$missing" >&2
-    echo "set GROK2API_CONFIG (full yaml) OR set JWT_SECRET CREDENTIAL_KEY ADMIN_USER ADMIN_PASSWORD DATABASE_DSN" >&2
-    exit 1
-  fi
-  set -u
-  # shellcheck disable=SC2016
-  envsubst '${JWT_SECRET} ${CREDENTIAL_KEY} ${ADMIN_USER} ${ADMIN_PASSWORD} ${DATABASE_DSN}' \
-    < /app/config.pandastack.yaml > "$CONFIG_DEST"
-  if id grok2api >/dev/null 2>&1; then
-    chown grok2api:grok2api "$CONFIG_DEST" 2>/dev/null || true
-  fi
-  chmod 0600 "$CONFIG_DEST"
 elif [ -f "${GROK2API_CONFIG_SOURCE:-/run/grok2api/config.yaml}" ]; then
   set -u
   write_config_from_file "${GROK2API_CONFIG_SOURCE}"
 else
-  echo "missing config: set GROK2API_CONFIG env, or template envs, or mount config.yaml to /run/grok2api/config.yaml" >&2
+  echo "missing config: set GROK2API_CONFIG env or mount config.yaml to /run/grok2api/config.yaml" >&2
   exit 1
 fi
 
